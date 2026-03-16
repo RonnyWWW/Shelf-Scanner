@@ -1,0 +1,11 @@
+strip_mapper:
+  ros__parameters:
+    scan_topic: "/scan"
+    range_min_m: 0.1
+    range_max_m: 6.0
+    angle_min_deg: -80.0
+    angle_max_deg: 80.0
+    z_min_m: 0.0
+    z_max_m: 0.6
+    dz_m: 0.01
+    strip_width_cols: 600

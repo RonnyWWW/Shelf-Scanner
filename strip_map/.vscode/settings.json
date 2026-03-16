@@ -1,0 +1,17 @@
+{
+    "ROS2.distro": "humble",
+    "python.autoComplete.extraPaths": [
+        "/home/ronsdhawan/stock_ws/install/strip_map/lib/python3.10/site-packages",
+        "/home/ronsdhawan/stock_ws/install/sick_scan_xd/local/lib/python3.10/dist-packages",
+        "/home/ronsdhawan/stock_ws/src/install/strip_map/lib/python3.10/site-packages",
+        "/opt/ros/humble/lib/python3.10/site-packages",
+        "/opt/ros/humble/local/lib/python3.10/dist-packages"
+    ],
+    "python.analysis.extraPaths": [
+        "/home/ronsdhawan/stock_ws/install/strip_map/lib/python3.10/site-packages",
+        "/home/ronsdhawan/stock_ws/install/sick_scan_xd/local/lib/python3.10/dist-packages",
+        "/home/ronsdhawan/stock_ws/src/install/strip_map/lib/python3.10/site-packages",
+        "/opt/ros/humble/lib/python3.10/site-packages",
+        "/opt/ros/humble/local/lib/python3.10/dist-packages"
+    ]
+}
