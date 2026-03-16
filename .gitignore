@@ -1,0 +1,13 @@
+# VS Code
+.vscode/browse.vc.db
+.vscode/ipch/
+*.VC.db
+
+build/
+install/
+log/
+pycache/
+*.pyc
+.egg-info/
+*.swp
+*.bak
