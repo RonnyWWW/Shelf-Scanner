@@ -2,6 +2,7 @@
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan, Image, PointCloud2
+from nav_msgs.msg import Odometry
 from cv_bridge import CvBridge
 import numpy as np
 import cv2
@@ -14,11 +15,23 @@ class DualStripMapper(Node):
     def __init__(self):
         super().__init__('dual_strip_mapper')
 
-        # Declare parameters
-        self.declare_parameter('scan_topic', '/sick_tim_5xx/scan')
+        # Declare scan topic parameter
+        self.declare_parameter('scan_topic', '/scan')
         self.scan_topic = self.get_parameter('scan_topic').get_parameter_value().string_value
 
-        # QoS settings
+        # ============ VELOCITY SYNC PARAMETERS ============
+        self.declare_parameter('velocity_topic', '/odom')
+        self.declare_parameter('enable_velocity_sync', True)
+        self.declare_parameter('pixels_per_meter', 200.0)
+        self.declare_parameter('min_velocity_threshold', 0.01)
+        
+        self.velocity_topic = self.get_parameter('velocity_topic').get_parameter_value().string_value
+        self.enable_velocity_sync = self.get_parameter('enable_velocity_sync').get_parameter_value().bool_value
+        self.pixels_per_meter = self.get_parameter('pixels_per_meter').get_parameter_value().double_value
+        self.min_vel_threshold = self.get_parameter('min_velocity_threshold').get_parameter_value().double_value
+        # ==================================================
+
+        # QoS settings (match SICK driver)
         qos_profile = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,
             durability=DurabilityPolicy.VOLATILE,
@@ -40,6 +53,16 @@ class DualStripMapper(Node):
             qos_profile
         )
 
+        # ============ VELOCITY SUBSCRIBER ============
+        if self.enable_velocity_sync:
+            self.vel_sub = self.create_subscription(
+                Odometry,
+                self.velocity_topic,
+                self.odom_cb,
+                10
+            )
+        # =============================================
+
         # Bridge + visualization setup
         self.bridge = CvBridge()
         self.strip_height = 300
@@ -53,7 +76,79 @@ class DualStripMapper(Node):
         self.accumulated_points_left = []
         self.accumulated_points_right = []
         
-        self.get_logger().info(f"✅ DualStripMapper started — listening on {self.scan_topic}")
+        # ============ VELOCITY SYNC STATE ============
+        self.current_velocity = 0.0
+        self.distance_accumulator = 0.0
+        self.column_spacing = 1.0 / self.pixels_per_meter
+        self.last_scan_column_left = None  # Store column for replay
+        self.last_scan_column_right = None
+        self.last_update_time = self.get_clock().now()
+        # =============================================
+        
+        sync_status = "ENABLED" if self.enable_velocity_sync else "DISABLED"
+        self.get_logger().info(
+            f"✅ DualStripMapper started – waiting for LiDAR scans on {self.scan_topic}...\n"
+            f"   Velocity Sync: {sync_status}"
+            + (f"\n   Velocity topic: {self.velocity_topic}\n   Resolution: {self.pixels_per_meter:.1f} px/m" 
+               if self.enable_velocity_sync else "")
+        )
+
+    # ============ VELOCITY CALLBACK ============
+    def odom_cb(self, msg: Odometry):
+        """Process odometry to update velocity and add columns based on distance."""
+        if not self.enable_velocity_sync:
+            return
+        
+        if self.last_scan_column_left is None and self.last_scan_column_right is None:
+            return
+        
+        self.current_velocity = abs(msg.twist.twist.linear.x)
+        
+        # Calculate time delta
+        now = self.get_clock().now()
+        dt = (now - self.last_update_time).nanoseconds / 1e9
+        self.last_update_time = now
+        
+        # Only update if moving fast enough
+        if self.current_velocity < self.min_vel_threshold:
+            return
+        
+        # Calculate distance traveled
+        distance = self.current_velocity * dt
+        self.distance_accumulator += distance
+        
+        # Determine how many columns to add
+        columns_to_add = int(self.distance_accumulator / self.column_spacing)
+        
+        if columns_to_add > 0:
+            # Add columns (up to 10 per update to prevent overload)
+            for _ in range(min(columns_to_add, 10)):
+                # Update LEFT strip
+                if self.last_scan_column_left is not None:
+                    self.strip_image_left = np.roll(self.strip_image_left, -1, axis=1)
+                    self.strip_image_left[:, -1] = self.last_scan_column_left[:, 0]
+                
+                # Update RIGHT strip
+                if self.last_scan_column_right is not None:
+                    self.strip_image_right = np.roll(self.strip_image_right, -1, axis=1)
+                    self.strip_image_right[:, -1] = self.last_scan_column_right[:, 0]
+            
+            # Update accumulator
+            self.distance_accumulator -= columns_to_add * self.column_spacing
+            
+            # Publish updated images
+            if self.last_scan_column_left is not None:
+                image_msg = self.bridge.cv2_to_imgmsg(self.strip_image_left, encoding='mono8')
+                image_msg.header.stamp = now.to_msg()
+                image_msg.header.frame_id = 'strip_map_left'
+                self.image_pub_left.publish(image_msg)
+            
+            if self.last_scan_column_right is not None:
+                image_msg = self.bridge.cv2_to_imgmsg(self.strip_image_right, encoding='mono8')
+                image_msg.header.stamp = now.to_msg()
+                image_msg.header.frame_id = 'strip_map_right'
+                self.image_pub_right.publish(image_msg)
+    # ===========================================
 
     # ================================================================
     # CALLBACK
@@ -93,7 +188,8 @@ class DualStripMapper(Node):
                 self.accumulated_points_left,
                 msg.header,
                 self.image_pub_left,
-                self.pointcloud_pub_left
+                self.pointcloud_pub_left,
+                'left'
             )
 
         # ================================================================
@@ -107,7 +203,8 @@ class DualStripMapper(Node):
                 self.accumulated_points_right,
                 msg.header,
                 self.image_pub_right,
-                self.pointcloud_pub_right
+                self.pointcloud_pub_right,
+                'right'
             )
 
         self.get_logger().info(
@@ -118,7 +215,7 @@ class DualStripMapper(Node):
     # PROCESS INDIVIDUAL STRIP (LEFT OR RIGHT)
     # ================================================================
     def process_strip(self, ranges, angles, strip_image, accumulated_points, 
-                     header, image_pub, cloud_pub):
+                     header, image_pub, cloud_pub, side):
         """Process one side (left or right) of the scan."""
         
         # --- Build Vertical Column for Strip Map ---
@@ -133,14 +230,24 @@ class DualStripMapper(Node):
         column = cv2.resize(normalized.reshape(-1, 1), (1, self.strip_height))
         column = cv2.flip(column, 0)
 
-        # Add column to strip map (scrolling left)
-        strip_image[:] = np.roll(strip_image, -1, axis=1)
-        strip_image[:, -1] = column[:, 0]
-
-        # Publish strip image
-        image_msg = self.bridge.cv2_to_imgmsg(strip_image, encoding='mono8')
-        image_msg.header = header
-        image_pub.publish(image_msg)
+        # ============ VELOCITY SYNC HANDLING ============
+        if self.enable_velocity_sync:
+            # Store column for velocity-based replay
+            if side == 'left':
+                self.last_scan_column_left = column
+            else:
+                self.last_scan_column_right = column
+            # Don't add to strip here - velocity callback will do it
+        else:
+            # Original behavior: Add column immediately
+            strip_image[:] = np.roll(strip_image, -1, axis=1)
+            strip_image[:, -1] = column[:, 0]
+            
+            # Publish strip image
+            image_msg = self.bridge.cv2_to_imgmsg(strip_image, encoding='mono8')
+            image_msg.header = header
+            image_pub.publish(image_msg)
+        # ================================================
 
         # --- Build Point Cloud ---
         xs = ranges * np.cos(angles)  # horizontal distance
