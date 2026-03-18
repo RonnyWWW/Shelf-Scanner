@@ -20,26 +20,38 @@ def generate_launch_description():
             output='screen'
         ),
         
-        # Strip Mapper with Velocity Sync
+        # Dual Strip Mapper (replaces strip_node_patched)
         Node(
             package='strip_map',
-            executable='strip_node_patched',
-            name='strip_mapper',
+            executable='dual_strip_mapper',
+            name='dual_strip_mapper',
             output='screen',
             parameters=[{
-                'scan_topic': '/sick_tim_5xx/scan',
-                'enable_velocity_sync': True,
-                'velocity_topic': '/odom',
-                'pixels_per_meter': 200.0,
-                'min_velocity_threshold': 0.01
+                'scan_topic': '/sick_tim_5xx/scan'
             }]
         ),
         
-        # Gap Detector
+        # Gap Detector - LEFT SIDE
         Node(
             package='strip_map',
             executable='gap_detector',
-            name='gap_detector',
-            output='screen'
+            name='gap_detector_left',
+            output='screen',
+            remappings=[
+                ('/strip/image', '/strip/image/left'),
+                ('/strip/gaps', '/strip/gaps/left')
+            ]
+        ),
+        
+        # Gap Detector - RIGHT SIDE
+        Node(
+            package='strip_map',
+            executable='gap_detector',
+            name='gap_detector_right',
+            output='screen',
+            remappings=[
+                ('/strip/image', '/strip/image/right'),
+                ('/strip/gaps', '/strip/gaps/right')
+            ]
         ),
     ])
