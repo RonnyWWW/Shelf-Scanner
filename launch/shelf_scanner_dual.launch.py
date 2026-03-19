@@ -12,7 +12,7 @@ def generate_launch_description():
             arguments=['hostname:=192.168.0.1', 'scanner_type:=sick_tim_5xx']
         ),
         
-        # Dual Strip Mapper (uses /odom from their mcu_to_pi node)
+        # Dual Strip Mapper (uses /odom from Kendall's mcu_to_pi node)
         Node(
             package='strip_map',
             executable='dual_strip_mapper',
