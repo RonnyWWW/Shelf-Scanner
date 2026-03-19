@@ -20,14 +20,18 @@ def generate_launch_description():
             output='screen'
         ),
         
-        # Dual Strip Mapper (replaces strip_node_patched)
+        # Dual Strip Mapper
         Node(
             package='strip_map',
             executable='dual_strip_mapper',
             name='dual_strip_mapper',
             output='screen',
             parameters=[{
-                'scan_topic': '/sick_tim_5xx/scan'
+                'scan_topic': '/sick_tim_5xx/scan',
+                'enable_velocity_sync': True,
+                'velocity_topic': '/odom',
+                'pixels_per_meter': 200.0,
+                'min_velocity_threshold': 0.01
             }]
         ),
         
@@ -37,6 +41,9 @@ def generate_launch_description():
             executable='gap_detector',
             name='gap_detector_left',
             output='screen',
+            parameters=[{
+                'process_every_n_frames': 2  # Process every 2nd frame (~50% CPU reduction)
+            }],
             remappings=[
                 ('/strip/image', '/strip/image/left'),
                 ('/strip/gaps', '/strip/gaps/left')
@@ -49,6 +56,9 @@ def generate_launch_description():
             executable='gap_detector',
             name='gap_detector_right',
             output='screen',
+            parameters=[{
+                'process_every_n_frames': 2  # Process every 2nd frame (~50% CPU reduction)
+            }],
             remappings=[
                 ('/strip/image', '/strip/image/right'),
                 ('/strip/gaps', '/strip/gaps/right')
