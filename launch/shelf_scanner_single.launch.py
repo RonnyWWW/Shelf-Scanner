@@ -12,12 +12,6 @@ def generate_launch_description():
         ),
         Node(
             package='strip_map',
-            executable='mcu_odom',
-            name='odometry',
-            output='screen'
-        ),
-        Node(
-            package='strip_map',
             executable='strip_node_patched',
             name='strip_mapper',
             output='screen',
