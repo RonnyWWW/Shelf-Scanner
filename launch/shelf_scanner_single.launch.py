@@ -18,17 +18,24 @@ def generate_launch_description():
         ),
         Node(
             package='strip_map',
-            executable='strip_node_patched',  # Original single-view mapper
+            executable='strip_node_patched',
             name='strip_mapper',
             output='screen',
             parameters=[{
                 'scan_topic': '/sick_tim_5xx/scan',
+                'enable_velocity_sync': True,
+                'velocity_topic': '/odom',
+                'pixels_per_meter': 200.0,
+                'min_velocity_threshold': 0.01
             }]
         ),
         Node(
             package='strip_map',
             executable='gap_detector',
             name='gap_detector',
-            output='screen'
+            output='screen',
+            parameters=[{
+                'process_every_n_frames': 2  # Process every 2nd frame for CPU savings
+            }]
         ),
     ])
