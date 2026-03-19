@@ -42,7 +42,7 @@ class StripMapper(Node):
 
         # Publishers
         self.image_pub = self.create_publisher(Image, '/strip/image', 10)
-        self.pointcloud_pub = self.create_publisher(PointCloud2, '/strip/pointcloud', 10)
+        #self.pointcloud_pub = self.create_publisher(PointCloud2, '/strip/pointcloud', 10)
 
         # LiDAR subscriber
         self.subscriber = self.create_subscription(
@@ -170,19 +170,19 @@ class StripMapper(Node):
         # ==========================================
 
         # --- Build Point Cloud ---
-        xs = np.zeros_like(ranges)  # depth axis (into the shelf)
-        ys = ranges * np.cos(angles)  # vertical axis
-        zs = ranges * np.sin(angles)  # horizontal offset
-        points = np.vstack((xs, ys, zs)).T.astype(np.float32)
+        #xs = np.zeros_like(ranges)  # depth axis (into the shelf)
+        #ys = ranges * np.cos(angles)  # vertical axis
+        #zs = ranges * np.sin(angles)  # horizontal offset
+        #points = np.vstack((xs, ys, zs)).T.astype(np.float32)
 
         # Accumulate for visualization
-        self.accumulated_points.append(points)
-        if len(self.accumulated_points) > 1000:
-            self.accumulated_points = self.accumulated_points[-1000:]
+        #self.accumulated_points.append(points)
+        #if len(self.accumulated_points) > 1000:
+            #self.accumulated_points = self.accumulated_points[-1000:]
 
-        merged = np.concatenate(self.accumulated_points, axis=0)
-        cloud_msg = pc2.create_cloud_xyz32(msg.header, merged)
-        self.pointcloud_pub.publish(cloud_msg)
+        #merged = np.concatenate(self.accumulated_points, axis=0)
+        #cloud_msg = pc2.create_cloud_xyz32(msg.header, merged)
+        #self.pointcloud_pub.publish(cloud_msg)
 
         self.get_logger().info(f"Published accumulated vertical strip map ({len(self.accumulated_points)} frames)")
 
@@ -191,11 +191,11 @@ class StripMapper(Node):
     # ================================================================
     def destroy_node(self):
         super().destroy_node()
-        if len(self.accumulated_points) > 0:
-            merged = np.concatenate(self.accumulated_points, axis=0)
-            save_path = os.path.expanduser("~/vertical_strip_map.xyz")
-            np.savetxt(save_path, merged[:, :3], fmt="%.4f")
-            self.get_logger().info(f"💾 Saved vertical strip map to {save_path}")
+        #if len(self.accumulated_points) > 0:
+            #merged = np.concatenate(self.accumulated_points, axis=0)
+            #save_path = os.path.expanduser("~/vertical_strip_map.xyz")
+            #np.savetxt(save_path, merged[:, :3], fmt="%.4f")
+            #self.get_logger().info(f"💾 Saved vertical strip map to {save_path}")
 
 
 def main(args=None):
