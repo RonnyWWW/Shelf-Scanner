@@ -3,7 +3,7 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     return LaunchDescription([
-        # LiDAR Driver
+        # LiDAR Driver - SICK TiM561 (vertical mounted for shelves)
         Node(
             package='sick_scan_xd',
             executable='sick_generic_caller',
@@ -12,15 +12,7 @@ def generate_launch_description():
             arguments=['hostname:=192.168.0.1', 'scanner_type:=sick_tim_5xx']
         ),
         
-        # Odometry Node
-        Node(
-            package='strip_map',
-            executable='mcu_odom',
-            name='odometry',
-            output='screen'
-        ),
-        
-        # Dual Strip Mapper
+        # Dual Strip Mapper (uses /odom from their mcu_to_pi node)
         Node(
             package='strip_map',
             executable='dual_strip_mapper',
@@ -42,7 +34,7 @@ def generate_launch_description():
             name='gap_detector_left',
             output='screen',
             parameters=[{
-                'process_every_n_frames': 2  # Process every 2nd frame (~50% CPU reduction)
+                'process_every_n_frames': 2
             }],
             remappings=[
                 ('/strip/image', '/strip/image/left'),
@@ -57,7 +49,7 @@ def generate_launch_description():
             name='gap_detector_right',
             output='screen',
             parameters=[{
-                'process_every_n_frames': 2  # Process every 2nd frame (~50% CPU reduction)
+                'process_every_n_frames': 2
             }],
             remappings=[
                 ('/strip/image', '/strip/image/right'),
