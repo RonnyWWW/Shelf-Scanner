@@ -11,6 +11,12 @@ class GapDetector(Node):
     def __init__(self):
         super().__init__('gap_detector')
 
+        # ============ FRAME SKIP PARAMETER (NEW) ============
+        self.declare_parameter('process_every_n_frames', 1)  # 1 = every frame, 2 = every other, etc.
+        self.process_every_n_frames = self.get_parameter('process_every_n_frames').get_parameter_value().integer_value
+        self.frame_count = 0
+        # ====================================================
+
         # ------------------------------------------------------------
         # Subscriptions
         # ------------------------------------------------------------
@@ -35,7 +41,8 @@ class GapDetector(Node):
 
         self.bridge = CvBridge()
         self.get_logger().info(
-            "✅ GapDetector (distance-scaled, depth-delta, multi-shelf, right-side only + VISUAL UPGRADES) running..."
+            f"✅ GapDetector running...\n"
+            f"   Processing every {self.process_every_n_frames} frame(s)"
         )
 
         # ------------------------------------------------------------
@@ -86,6 +93,12 @@ class GapDetector(Node):
     # Main image callback
     # ------------------------------------------------------------------
     def image_cb(self, msg: Image):
+        # ============ FRAME SKIP CHECK (NEW) ============
+        self.frame_count += 1
+        if self.frame_count % self.process_every_n_frames != 0:
+            return  # Skip this frame
+        # ================================================
+        
         try:
             gray = self.bridge.imgmsg_to_cv2(msg, desired_encoding='mono8')
             h, w = gray.shape
