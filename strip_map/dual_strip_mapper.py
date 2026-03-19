@@ -42,8 +42,8 @@ class DualStripMapper(Node):
         # Publishers - separate for left and right
         self.image_pub_left = self.create_publisher(Image, '/strip/image/left', 10)
         self.image_pub_right = self.create_publisher(Image, '/strip/image/right', 10)
-        self.pointcloud_pub_left = self.create_publisher(PointCloud2, '/strip/pointcloud/left', 10)
-        self.pointcloud_pub_right = self.create_publisher(PointCloud2, '/strip/pointcloud/right', 10)
+        #self.pointcloud_pub_left = self.create_publisher(PointCloud2, '/strip/pointcloud/left', 10)
+        #self.pointcloud_pub_right = self.create_publisher(PointCloud2, '/strip/pointcloud/right', 10)
 
         # LiDAR subscriber
         self.subscriber = self.create_subscription(
@@ -250,19 +250,19 @@ class DualStripMapper(Node):
         # ================================================
 
         # --- Build Point Cloud ---
-        xs = ranges * np.cos(angles)  # horizontal distance
-        ys = np.zeros_like(ranges)     # forward axis (into the aisle)
-        zs = ranges * np.sin(angles)   # vertical component
-        points = np.vstack((xs, ys, zs)).T.astype(np.float32)
+        #xs = ranges * np.cos(angles)  # horizontal distance
+        #ys = np.zeros_like(ranges)     # forward axis (into the aisle)
+        #zs = ranges * np.sin(angles)   # vertical component
+        #points = np.vstack((xs, ys, zs)).T.astype(np.float32)
 
         # Accumulate for visualization
-        accumulated_points.append(points)
-        if len(accumulated_points) > 1000:
-            accumulated_points[:] = accumulated_points[-1000:]
+        #accumulated_points.append(points)
+        #if len(accumulated_points) > 1000:
+        #    accumulated_points[:] = accumulated_points[-1000:]
 
-        merged = np.concatenate(accumulated_points, axis=0)
-        cloud_msg = pc2.create_cloud_xyz32(header, merged)
-        cloud_pub.publish(cloud_msg)
+        #merged = np.concatenate(accumulated_points, axis=0)
+        #cloud_msg = pc2.create_cloud_xyz32(header, merged)
+        #cloud_pub.publish(cloud_msg)
 
     # ================================================================
     # SAVE STRIP MAPS
@@ -271,18 +271,18 @@ class DualStripMapper(Node):
         super().destroy_node()
         
         # Save left side
-        if len(self.accumulated_points_left) > 0:
-            merged = np.concatenate(self.accumulated_points_left, axis=0)
-            save_path = os.path.expanduser("~/strip_map_left.xyz")
-            np.savetxt(save_path, merged[:, :3], fmt="%.4f")
-            self.get_logger().info(f"💾 Saved LEFT strip map to {save_path}")
+        #if len(self.accumulated_points_left) > 0:
+        #   merged = np.concatenate(self.accumulated_points_left, axis=0)
+        #    save_path = os.path.expanduser("~/strip_map_left.xyz")
+        #    np.savetxt(save_path, merged[:, :3], fmt="%.4f")
+        #    self.get_logger().info(f"💾 Saved LEFT strip map to {save_path}")
         
         # Save right side
-        if len(self.accumulated_points_right) > 0:
-            merged = np.concatenate(self.accumulated_points_right, axis=0)
-            save_path = os.path.expanduser("~/strip_map_right.xyz")
-            np.savetxt(save_path, merged[:, :3], fmt="%.4f")
-            self.get_logger().info(f"💾 Saved RIGHT strip map to {save_path}")
+        #if len(self.accumulated_points_right) > 0:
+        #    merged = np.concatenate(self.accumulated_points_right, axis=0)
+        #    save_path = os.path.expanduser("~/strip_map_right.xyz")
+        #    np.savetxt(save_path, merged[:, :3], fmt="%.4f")
+        #    self.get_logger().info(f"💾 Saved RIGHT strip map to {save_path}")
 
 
 def main(args=None):
