@@ -49,7 +49,7 @@ def generate_launch_description():
             name='gap_detector_right',
             output='screen',
             parameters=[{
-                'process_every_n_frames': 2
+                'process_every_n_frames': 3
             }],
             remappings=[
                 ('/strip/image', '/strip/image/right'),
