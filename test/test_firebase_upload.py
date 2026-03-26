@@ -2,19 +2,16 @@
 """
 test_firebase_upload.py
 ────────────────────────
-Standalone test — no ROS required.
+Standalone Firebase upload test — no ROS, no camera required.
 
-1. Opens the USB camera and captures one photo
-2. Uploads it to Firebase Storage under  test_uploads/<timestamp>/camera.jpg
-3. Writes a Firestore document to the  test_uploads  collection
-4. Prints the public URL if successful
+Generates a dummy test image and uploads it to Firebase Storage,
+then writes a Firestore document to confirm the full pipeline works.
 
 Run:
     python3 test_firebase_upload.py
 
 Optional env vars:
     GOOGLE_APPLICATION_CREDENTIALS   path to service-account JSON
-    USB_CAM_INDEX                     camera index (default 0)
 """
 
 import os
@@ -23,6 +20,7 @@ import datetime
 import tempfile
 
 import cv2
+import numpy as np
 import firebase_admin
 from firebase_admin import credentials, firestore, storage as fb_storage
 
@@ -32,7 +30,6 @@ SERVICE_ACCOUNT_PATH = os.environ.get(
     os.path.expanduser("~/firebase_service_account.json")
 )
 STORAGE_BUCKET = "sick-lidar-3.firebasestorage.app"
-CAM_INDEX      = int(os.environ.get("USB_CAM_INDEX", "0"))
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -50,32 +47,38 @@ def init_firebase():
     print("✅ Firebase initialised")
 
 
-def capture_photo():
-    print(f"\n📷 Opening USB camera at index {CAM_INDEX}...")
-    cap = cv2.VideoCapture(CAM_INDEX)
+def make_dummy_image():
+    """Generate a recognisable test image — grey background with text."""
+    img = np.ones((720, 1280, 3), dtype=np.uint8) * 60  # dark grey
 
-    if not cap.isOpened():
-        print(f"❌ Could not open camera at index {CAM_INDEX}")
-        print("   Try setting USB_CAM_INDEX=1 (or 2) if you have multiple cameras")
-        sys.exit(1)
+    # Coloured banner across the top
+    img[:80, :] = (30, 120, 200)   # orange-ish in BGR
 
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH,  1280)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT,  720)
+    cv2.putText(img, "FIREBASE UPLOAD TEST",
+                (320, 55), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 3)
 
-    # Flush buffer
-    for _ in range(2):
-        cap.grab()
+    now_str = datetime.datetime.utcnow().strftime("%Y-%m-%d  %H:%M:%S UTC")
+    cv2.putText(img, now_str,
+                (430, 130), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (200, 200, 200), 2)
 
-    ret, frame = cap.read()
-    cap.release()
+    cv2.putText(img, "Shelf Scanner  —  Raspberry Pi 4",
+                (390, 200), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (180, 230, 180), 2)
 
-    if not ret or frame is None:
-        print("❌ Camera read() failed")
-        sys.exit(1)
+    cv2.putText(img, "Camera: DUMMY IMAGE (no physical camera)",
+                (300, 260), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (100, 180, 255), 2)
 
-    h, w = frame.shape[:2]
-    print(f"✅ Photo captured  ({w}x{h})")
-    return frame
+    # Draw a simple shelf-gap illustration in the centre
+    shelf_y = [340, 420, 500, 580]
+    for sy in shelf_y:
+        cv2.rectangle(img, (200, sy), (1080, sy + 15), (80, 80, 160), -1)
+
+    # Gap box
+    cv2.rectangle(img, (550, 355), (750, 415), (0, 0, 255), 3)
+    cv2.putText(img, "GAP", (615, 395),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+
+    print("✅ Dummy test image generated  (1280x720)")
+    return img
 
 
 def upload(frame):
@@ -88,7 +91,6 @@ def upload(frame):
     bucket = fb_storage.bucket()
     db     = firestore.client()
 
-    # Save frame to a temp file and upload
     with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tf:
         cv2.imwrite(tf.name, frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
         tmp_path = tf.name
@@ -102,12 +104,11 @@ def upload(frame):
     print(f"✅ Image uploaded")
     print(f"   URL: {camera_url}")
 
-    # Write Firestore document
     print("\n📝 Writing Firestore document to 'test_uploads' collection...")
     _, doc_ref = db.collection("test_uploads").add({
         "timestamp":  now.isoformat() + "Z",
         "camera_url": camera_url,
-        "note":       "manual test upload",
+        "note":       "dummy image test — no physical camera",
     })
     print(f"✅ Firestore document written  (id: {doc_ref.id})")
 
@@ -115,17 +116,17 @@ def upload(frame):
 
 
 if __name__ == "__main__":
-    print("=" * 50)
-    print("  Firebase Upload Test")
-    print("=" * 50)
+    print("=" * 55)
+    print("  Firebase Upload Test  (dummy image)")
+    print("=" * 55)
 
     init_firebase()
-    frame = capture_photo()
+    frame = make_dummy_image()
     url   = upload(frame)
 
-    print("\n" + "=" * 50)
+    print("\n" + "=" * 55)
     print("✅ All done! Check your Firebase console:")
-    print("   Storage  → test_uploads/")
+    print("   Storage   → test_uploads/")
     print("   Firestore → test_uploads collection")
     print(f"\n   Direct image URL:\n   {url}")
-    print("=" * 50)
+    print("=" * 55)
