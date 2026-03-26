@@ -2,48 +2,11 @@
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image, LaserScan
+from std_msgs.msg import String
 from cv_bridge import CvBridge
 import cv2
 import numpy as np
-
-# ── Firebase / Storage ──────────────────────────────────────────────────────
-import threading
-import datetime
-import tempfile
-import os
-import firebase_admin
-from firebase_admin import credentials, firestore, storage as fb_storage
-
-# ---------------------------------------------------------------------------
-# Firebase initialisation
-# Place your downloaded service-account JSON at the path below, OR set the
-# environment variable  GOOGLE_APPLICATION_CREDENTIALS  to its path.
-# Download from: Firebase Console → Project Settings → Service Accounts
-#                → Generate new private key
-# ---------------------------------------------------------------------------
-_SERVICE_ACCOUNT_PATH = os.environ.get(
-    "GOOGLE_APPLICATION_CREDENTIALS",
-    os.path.expanduser("~/firebase_service_account.json")
-)
-
-_FIREBASE_STORAGE_BUCKET = "sick-lidar-3.firebasestorage.app"
-
-def _init_firebase():
-    """Initialise Firebase Admin SDK once."""
-    if not firebase_admin._apps:
-        cred = credentials.Certificate(_SERVICE_ACCOUNT_PATH)
-        firebase_admin.initialize_app(cred, {
-            "storageBucket": _FIREBASE_STORAGE_BUCKET
-        })
-
-try:
-    _init_firebase()
-    _FIREBASE_OK = True
-except Exception as _fb_err:
-    print(f"[GapDetector] ⚠️  Firebase init failed: {_fb_err}")
-    print("              Upload will be skipped until credentials are available.")
-    _FIREBASE_OK = False
-# ────────────────────────────────────────────────────────────────────────────
+import json
 
 
 class GapDetector(Node):
@@ -77,14 +40,18 @@ class GapDetector(Node):
         )
 
         # ------------------------------------------------------------
-        # Publisher
+        # Publishers
+        #   /strip/gaps          — annotated BGR image (existing, unchanged)
+        #   /gap_events/trigger  — lightweight JSON string consumed by
+        #                          firebase_uploader node
         # ------------------------------------------------------------
-        self.publisher = self.create_publisher(Image, '/strip/gaps', 10)
+        self.gaps_pub    = self.create_publisher(Image,  '/strip/gaps',         10)
+        self.trigger_pub = self.create_publisher(String, '/gap_events/trigger', 10)
 
         self.bridge = CvBridge()
         self.get_logger().info(
-            f"✅ GapDetector (distance-scaled, depth-delta, multi-shelf, "
-            f"right-side only + USB CAMERA + FIREBASE) running...\n"
+            f"✅ GapDetector running — publishing to /strip/gaps "
+            f"and /gap_events/trigger\n"
             f"   Processing every {self.process_every_n_frames} frame(s)"
         )
 
@@ -105,33 +72,6 @@ class GapDetector(Node):
 
         # Only detect gaps in NEW (rightmost) region
         self.active_width = 250
-
-        # ------------------------------------------------------------
-        # USB Camera setup
-        # Change USB_CAM_INDEX env var if the Pi has multiple cameras
-        # ------------------------------------------------------------
-        self._cam_index = int(os.environ.get("USB_CAM_INDEX", "0"))
-        self._cap = cv2.VideoCapture(self._cam_index)
-        if not self._cap.isOpened():
-            self.get_logger().warn(
-                f"⚠️  USB camera at index {self._cam_index} could not be opened. "
-                "Camera capture will be skipped."
-            )
-        else:
-            self._cap.set(cv2.CAP_PROP_FRAME_WIDTH,  1280)
-            self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT,  720)
-            self.get_logger().info(
-                f"📷 USB camera opened at index {self._cam_index}"
-            )
-
-        # ------------------------------------------------------------
-        # Upload throttle
-        # A new upload is only allowed after COOLDOWN_SEC seconds.
-        # Override with env var GAP_COOLDOWN_SEC.
-        # ------------------------------------------------------------
-        self._cooldown_sec  = float(os.environ.get("GAP_COOLDOWN_SEC", "5.0"))
-        self._last_upload_t = 0.0
-        self._upload_lock   = threading.Lock()
 
     # ------------------------------------------------------------------
     # LiDAR callback: estimate current distance to shelf
@@ -156,120 +96,6 @@ class GapDetector(Node):
             return
 
         self.latest_distance = float(np.median(subset))
-
-    # ------------------------------------------------------------------
-    # Capture a fresh frame from the USB camera
-    # ------------------------------------------------------------------
-    def _capture_usb_frame(self):
-        """Return a BGR numpy image from the USB camera, or None on failure."""
-        if not self._cap.isOpened():
-            return None
-        # Flush buffered frames so we get the most current image
-        for _ in range(2):
-            self._cap.grab()
-        ret, frame = self._cap.read()
-        if not ret or frame is None:
-            self.get_logger().warn("📷 USB camera read() failed.")
-            return None
-        return frame
-
-    # ------------------------------------------------------------------
-    # Upload images + metadata to Firebase (runs in a background thread)
-    # ------------------------------------------------------------------
-    def _upload_to_firebase(self, camera_frame: np.ndarray,
-                             lidar_display: np.ndarray,
-                             gap_count: int,
-                             dist: float):
-        """
-        Uploads to Firebase Storage and writes a Firestore document.
-
-        Storage layout:
-            gap_events/
-                YYYYMMDD_HHMMSS_<us>/
-                    camera.jpg      ← USB camera photo
-                    lidar.jpg       ← annotated LiDAR strip image
-
-        Firestore document  (collection: gap_events):
-            {
-              timestamp:   ISO-8601 string,
-              gap_count:   int,
-              distance_m:  float,
-              camera_url:  public download URL,
-              lidar_url:   public download URL,
-            }
-        """
-        if not _FIREBASE_OK:
-            return
-
-        try:
-            now    = datetime.datetime.utcnow()
-            ts_str = now.strftime("%Y%m%d_%H%M%S_") + f"{now.microsecond:06d}"
-            folder = f"gap_events/{ts_str}"
-
-            bucket = fb_storage.bucket()
-            db     = firestore.client()
-
-            # ── Upload camera image ────────────────────────────────────────
-            with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tf:
-                cv2.imwrite(tf.name, camera_frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
-                cam_blob = bucket.blob(f"{folder}/camera.jpg")
-                cam_blob.upload_from_filename(tf.name, content_type="image/jpeg")
-                cam_blob.make_public()
-                camera_url = cam_blob.public_url
-            os.unlink(tf.name)
-
-            # ── Upload LiDAR annotated image ───────────────────────────────
-            with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tf:
-                cv2.imwrite(tf.name, lidar_display, [cv2.IMWRITE_JPEG_QUALITY, 85])
-                lidar_blob = bucket.blob(f"{folder}/lidar.jpg")
-                lidar_blob.upload_from_filename(tf.name, content_type="image/jpeg")
-                lidar_blob.make_public()
-                lidar_url = lidar_blob.public_url
-            os.unlink(tf.name)
-
-            # ── Write Firestore document ───────────────────────────────────
-            db.collection("gap_events").add({
-                "timestamp":  now.isoformat() + "Z",
-                "gap_count":  gap_count,
-                "distance_m": round(dist, 3),
-                "camera_url": camera_url,
-                "lidar_url":  lidar_url,
-            })
-
-            self.get_logger().info(
-                f"☁️  Firebase upload OK → {folder}  "
-                f"(gaps={gap_count}, dist={dist:.2f} m)"
-            )
-
-        except Exception as e:
-            self.get_logger().error(f"Firebase upload failed: {e}")
-
-    # ------------------------------------------------------------------
-    # Trigger: capture camera + kick off upload (non-blocking)
-    # ------------------------------------------------------------------
-    def _trigger_camera_and_upload(self, lidar_display: np.ndarray,
-                                   gap_count: int, dist: float):
-        import time
-        now = time.monotonic()
-
-        with self._upload_lock:
-            if now - self._last_upload_t < self._cooldown_sec:
-                return          # still in cooldown window — skip
-            self._last_upload_t = now
-
-        camera_frame = self._capture_usb_frame()
-        if camera_frame is None:
-            self.get_logger().warn("📷 Skipping upload — no camera frame.")
-            return
-
-        # Deep-copy display so the background thread owns its own buffer
-        lidar_copy = lidar_display.copy()
-
-        threading.Thread(
-            target=self._upload_to_firebase,
-            args=(camera_frame, lidar_copy, gap_count, dist),
-            daemon=True
-        ).start()
 
     # ------------------------------------------------------------------
     # Main image callback
@@ -338,7 +164,7 @@ class GapDetector(Node):
             kernel = np.ones((3, 3), np.uint8)
 
             # ==============================================================
-            # 3) Shelf intervals
+            # 2) Shelf intervals
             # ==============================================================
             shelf_fronts    = sorted(shelf_fronts)
             shelf_intervals = []
@@ -353,7 +179,7 @@ class GapDetector(Node):
                     shelf_intervals.append((fr, top, bottom))
 
             # ==============================================================
-            # 4) Detect gaps
+            # 3) Detect gaps + build display image
             # ==============================================================
             display = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
 
@@ -469,21 +295,12 @@ class GapDetector(Node):
                         cv2.FONT_HERSHEY_SIMPLEX,
                         0.6, (255, 255, 255), 2)
 
-            # ==============================================================
-            # 5) Gap-triggered camera capture + Firebase upload
-            # ==============================================================
             if total_gaps > 0:
                 cv2.putText(display,
                             f"GAPS DETECTED: {total_gaps}",
                             (10, 20),
                             cv2.FONT_HERSHEY_SIMPLEX,
                             0.6, (0, 0, 255), 2)
-
-                self._trigger_camera_and_upload(
-                    lidar_display=display,
-                    gap_count=total_gaps,
-                    dist=dist
-                )
             else:
                 cv2.putText(display, "No product gaps detected",
                             (10, 20),
@@ -491,11 +308,26 @@ class GapDetector(Node):
                             (255, 255, 255), 1)
 
             # ==============================================================
-            # Publish annotated frame
+            # 4) Publish annotated image
             # ==============================================================
             out_msg        = self.bridge.cv2_to_imgmsg(display, encoding='bgr8')
             out_msg.header = msg.header
-            self.publisher.publish(out_msg)
+            self.gaps_pub.publish(out_msg)
+
+            # ==============================================================
+            # 5) If gaps found, publish trigger for firebase_uploader node
+            #    Payload is a small JSON string — no heavy data on this topic.
+            # ==============================================================
+            if total_gaps > 0:
+                payload = json.dumps({
+                    "gap_count":  total_gaps,
+                    "distance_m": round(dist, 3),
+                    "scale":      round(scale, 3),
+                })
+                self.trigger_pub.publish(String(data=payload))
+                self.get_logger().info(
+                    f"📢 Gap trigger published → {payload}"
+                )
 
             self.get_logger().info(
                 f"🟡 dist={dist:.2f} | fronts={len(shelf_fronts)} | "
@@ -504,15 +336,6 @@ class GapDetector(Node):
 
         except Exception as e:
             self.get_logger().error(f"Error in image_cb: {e}")
-
-    # ------------------------------------------------------------------
-    # Cleanup
-    # ------------------------------------------------------------------
-    def destroy_node(self):
-        if self._cap.isOpened():
-            self._cap.release()
-            self.get_logger().info("📷 USB camera released.")
-        super().destroy_node()
 
 
 def main(args=None):
