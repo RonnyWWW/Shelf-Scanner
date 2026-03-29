@@ -52,7 +52,7 @@ class StripMapper(Node):
             qos_profile
         )
 
-        # ============ VELOCITY SUBSCRIBER (NEW) ============
+        # ============ VELOCITY SUBSCRIBER============
         if self.enable_velocity_sync:
             self.vel_sub = self.create_subscription(
                 Odometry,
