@@ -29,7 +29,7 @@ def generate_launch_description():
             name='gap_detector',
             output='screen',
             parameters=[{
-                'process_every_n_frames': 3  # Processing every 2 frames for CPU overload
+                'process_every_n_frames': 2  # Processing every 2 frames for CPU overload
             }]
         ),
     ])
