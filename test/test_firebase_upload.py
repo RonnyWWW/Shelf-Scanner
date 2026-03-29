@@ -2,10 +2,12 @@
 """
 test_firebase_upload.py
 ────────────────────────
-Standalone Firebase upload test — no ROS, no camera required.
+Standalone test — no ROS required.
 
-Generates a dummy test image and uploads it to Firebase Storage,
-then writes a Firestore document to confirm the full pipeline works.
+1. Captures a photo using rpicam-still (Pi CSI camera)
+2. Uploads it to Firebase Storage under  test_uploads/<timestamp>/camera.jpg
+3. Writes a Firestore document to the  test_uploads  collection
+4. Prints the public URL if successful
 
 Run:
     python3 test_firebase_upload.py
@@ -18,9 +20,9 @@ import os
 import sys
 import datetime
 import tempfile
+import subprocess
 
 import cv2
-import numpy as np
 import firebase_admin
 from firebase_admin import credentials, firestore, storage as fb_storage
 
@@ -47,41 +49,39 @@ def init_firebase():
     print("✅ Firebase initialised")
 
 
-def make_dummy_image():
-    """Generate a recognisable test image — grey background with text."""
-    img = np.ones((720, 1280, 3), dtype=np.uint8) * 60  # dark grey
+def capture_photo():
+    """Capture using rpicam-still, fall back to libcamera-still."""
+    tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+    tmp_path = tmp.name
+    tmp.close()
 
-    # Coloured banner across the top
-    img[:80, :] = (30, 120, 200)   # orange-ish in BGR
+    # Try rpicam-still first, then libcamera-still
+    for cmd in ["rpicam-still", "libcamera-still"]:
+        print(f"\n📷 Trying {cmd}...")
+        result = subprocess.run(
+            [cmd, "-o", tmp_path, "-t", "1", "--nopreview"],
+            capture_output=True,
+            text=True
+        )
+        if result.returncode == 0 and os.path.exists(tmp_path):
+            frame = cv2.imread(tmp_path)
+            if frame is not None:
+                h, w = frame.shape[:2]
+                print(f"✅ Photo captured with {cmd}  ({w}x{h})")
+                return frame, tmp_path
+            else:
+                print(f"   ⚠️  {cmd} ran but image could not be read")
+        else:
+            print(f"   ⚠️  {cmd} failed: {result.stderr.strip()}")
 
-    cv2.putText(img, "FIREBASE UPLOAD TEST",
-                (320, 55), cv2.FONT_HERSHEY_SIMPLEX, 1.5, (255, 255, 255), 3)
-
-    now_str = datetime.datetime.utcnow().strftime("%Y-%m-%d  %H:%M:%S UTC")
-    cv2.putText(img, now_str,
-                (430, 130), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (200, 200, 200), 2)
-
-    cv2.putText(img, "Shelf Scanner  —  Raspberry Pi 4",
-                (390, 200), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (180, 230, 180), 2)
-
-    cv2.putText(img, "Camera: DUMMY IMAGE (no physical camera)",
-                (300, 260), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (100, 180, 255), 2)
-
-    # Draw a simple shelf-gap illustration in the centre
-    shelf_y = [340, 420, 500, 580]
-    for sy in shelf_y:
-        cv2.rectangle(img, (200, sy), (1080, sy + 15), (80, 80, 160), -1)
-
-    # Gap box
-    cv2.rectangle(img, (550, 355), (750, 415), (0, 0, 255), 3)
-    cv2.putText(img, "GAP", (615, 395),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-
-    print("✅ Dummy test image generated  (1280x720)")
-    return img
+    os.unlink(tmp_path)
+    print("❌ Could not capture image with rpicam-still or libcamera-still")
+    print("   Make sure the camera is connected and the commands are in PATH")
+    print("   Check with: which rpicam-still")
+    sys.exit(1)
 
 
-def upload(frame):
+def upload(frame, tmp_path):
     now    = datetime.datetime.utcnow()
     ts_str = now.strftime("%Y%m%d_%H%M%S_") + f"{now.microsecond:06d}"
     folder = f"test_uploads/{ts_str}"
@@ -91,16 +91,19 @@ def upload(frame):
     bucket = fb_storage.bucket()
     db     = firestore.client()
 
+    # Re-encode at 85% quality before uploading
     with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tf:
         cv2.imwrite(tf.name, frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
-        tmp_path = tf.name
+        upload_path = tf.name
 
     blob = bucket.blob(f"{folder}/camera.jpg")
-    blob.upload_from_filename(tmp_path, content_type="image/jpeg")
+    blob.upload_from_filename(upload_path, content_type="image/jpeg")
     blob.make_public()
+    camera_url = blob.public_url
+
+    os.unlink(upload_path)
     os.unlink(tmp_path)
 
-    camera_url = blob.public_url
     print(f"✅ Image uploaded")
     print(f"   URL: {camera_url}")
 
@@ -108,7 +111,7 @@ def upload(frame):
     _, doc_ref = db.collection("test_uploads").add({
         "timestamp":  now.isoformat() + "Z",
         "camera_url": camera_url,
-        "note":       "dummy image test — no physical camera",
+        "note":       "manual test upload — rpicam-still",
     })
     print(f"✅ Firestore document written  (id: {doc_ref.id})")
 
@@ -116,17 +119,17 @@ def upload(frame):
 
 
 if __name__ == "__main__":
-    print("=" * 55)
-    print("  Firebase Upload Test  (dummy image)")
-    print("=" * 55)
+    print("=" * 50)
+    print("  Firebase Upload Test (rpicam-still)")
+    print("=" * 50)
 
     init_firebase()
-    frame = make_dummy_image()
-    url   = upload(frame)
+    frame, tmp_path = capture_photo()
+    url = upload(frame, tmp_path)
 
-    print("\n" + "=" * 55)
+    print("\n" + "=" * 50)
     print("✅ All done! Check your Firebase console:")
-    print("   Storage   → test_uploads/")
+    print("   Storage  → test_uploads/")
     print("   Firestore → test_uploads collection")
     print(f"\n   Direct image URL:\n   {url}")
-    print("=" * 55)
+    print("=" * 50)
