@@ -1,4 +1,3 @@
-
 #!/usr/bin/env python3
 """
 firebase_uploader.py
@@ -6,7 +5,7 @@ firebase_uploader.py
 Standalone ROS 2 node that:
   1. Subscribes to  /gap_events/trigger  (std_msgs/String, JSON payload)
      published by gap_detector when a shelf gap is confirmed.
-  2. Captures a photo from a USB camera.
+  2. Captures a photo using rpicam-still (Pi CSI camera).
   3. Subscribes to  /strip/gaps  (sensor_msgs/Image) and latches the most
      recent annotated LiDAR frame to include in the upload.
   4. Uploads both images to Firebase Storage.
@@ -22,7 +21,7 @@ Firebase Storage layout
 ───────────────────────
   gap_events/
     YYYYMMDD_HHMMSS_<us>/
-      camera.jpg    ← USB camera photo
+      camera.jpg    ← Pi CSI camera photo
       lidar.jpg     ← annotated LiDAR strip
 
 Firestore document  (collection: gap_events)
@@ -40,7 +39,6 @@ Configuration (environment variables)
 ──────────────────────────────────────
   GOOGLE_APPLICATION_CREDENTIALS   path to service-account JSON
                                    (default: ~/firebase_service_account.json)
-  USB_CAM_INDEX                    OpenCV camera index (default: 0)
   GAP_COOLDOWN_SEC                 minimum seconds between uploads (default: 5)
 """
 
@@ -49,6 +47,7 @@ import os
 import datetime
 import tempfile
 import threading
+import subprocess
 
 import rclpy
 from rclpy.node import Node
@@ -92,23 +91,6 @@ class FirebaseUploader(Node):
         super().__init__('firebase_uploader')
 
         # ------------------------------------------------------------
-        # USB camera
-        # ------------------------------------------------------------
-        self._cam_index = int(os.environ.get("USB_CAM_INDEX", "0"))
-        self._cap = cv2.VideoCapture(self._cam_index)
-        if not self._cap.isOpened():
-            self.get_logger().warn(
-                f"⚠️  USB camera at index {self._cam_index} could not be opened. "
-                "Camera images will be skipped in uploads."
-            )
-        else:
-            self._cap.set(cv2.CAP_PROP_FRAME_WIDTH,  1280)
-            self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT,  720)
-            self.get_logger().info(
-                f"📷 USB camera opened at index {self._cam_index}"
-            )
-
-        # ------------------------------------------------------------
         # Cooldown — prevent repeat uploads for the same gap
         # ------------------------------------------------------------
         self._cooldown_sec  = float(os.environ.get("GAP_COOLDOWN_SEC", "5.0"))
@@ -125,7 +107,6 @@ class FirebaseUploader(Node):
         # ------------------------------------------------------------
         # Subscriptions
         # ------------------------------------------------------------
-        # Latch the most recent annotated LiDAR image
         self.lidar_sub = self.create_subscription(
             Image,
             '/strip/gaps',
@@ -133,7 +114,6 @@ class FirebaseUploader(Node):
             10
         )
 
-        # Main trigger from gap_detector
         self.trigger_sub = self.create_subscription(
             String,
             '/gap_events/trigger',
@@ -165,9 +145,8 @@ class FirebaseUploader(Node):
     def _trigger_cb(self, msg: String):
         import time
 
-        # Parse JSON payload from gap_detector
         try:
-            payload = json.loads(msg.data)
+            payload    = json.loads(msg.data)
             gap_count  = int(payload.get("gap_count",  0))
             distance_m = float(payload.get("distance_m", 0.0))
             scale      = float(payload.get("scale",      1.0))
@@ -179,14 +158,12 @@ class FirebaseUploader(Node):
         now = time.monotonic()
         with self._upload_lock:
             if now - self._last_upload_t < self._cooldown_sec:
-                self.get_logger().debug(
-                    "⏳ Upload skipped — still in cooldown window."
-                )
+                self.get_logger().debug("⏳ Upload skipped — still in cooldown window.")
                 return
             self._last_upload_t = now
 
-        # Capture USB camera frame
-        camera_frame = self._capture_usb_frame()
+        # Capture Pi CSI camera frame
+        camera_frame, tmp_path = self._capture_csi_frame()
 
         # Snapshot latest LiDAR frame
         with self._lidar_lock:
@@ -199,29 +176,57 @@ class FirebaseUploader(Node):
         # Fire upload in background thread so ROS spin is never blocked
         threading.Thread(
             target=self._upload,
-            args=(camera_frame, lidar_frame, gap_count, distance_m, scale),
+            args=(camera_frame, tmp_path, lidar_frame, gap_count, distance_m, scale),
             daemon=True
         ).start()
 
     # ------------------------------------------------------------------
-    # Capture a fresh frame from the USB camera
+    # Capture a frame using rpicam-still (falls back to libcamera-still)
     # ------------------------------------------------------------------
-    def _capture_usb_frame(self) -> np.ndarray | None:
-        if not self._cap.isOpened():
-            return None
-        # Flush buffered frames for freshest image
-        for _ in range(2):
-            self._cap.grab()
-        ret, frame = self._cap.read()
-        if not ret or frame is None:
-            self.get_logger().warn("📷 USB camera read() failed.")
-            return None
-        return frame
+    def _capture_csi_frame(self):
+        """
+        Returns (frame, tmp_path) where frame is a BGR numpy array and
+        tmp_path is the temp file to clean up after upload.
+        Returns (None, None) on failure.
+        """
+        tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+        tmp_path = tmp.name
+        tmp.close()
+
+        for cmd in ["rpicam-still", "libcamera-still"]:
+            result = subprocess.run(
+                [cmd, "-o", tmp_path, "-t", "1", "--nopreview"],
+                capture_output=True,
+                text=True
+            )
+            if result.returncode == 0 and os.path.exists(tmp_path):
+                frame = cv2.imread(tmp_path)
+                if frame is not None:
+                    self.get_logger().info(
+                        f"📷 Photo captured with {cmd} "
+                        f"({frame.shape[1]}x{frame.shape[0]})"
+                    )
+                    return frame, tmp_path
+                else:
+                    self.get_logger().warn(f"📷 {cmd} ran but image unreadable.")
+            else:
+                self.get_logger().warn(
+                    f"📷 {cmd} failed: {result.stderr.strip()}"
+                )
+
+        # Both commands failed
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+        self.get_logger().error(
+            "📷 Could not capture image — camera.jpg will be skipped."
+        )
+        return None, None
 
     # ------------------------------------------------------------------
     # Firebase upload (runs in background thread)
     # ------------------------------------------------------------------
     def _upload(self, camera_frame: np.ndarray | None,
+                tmp_path: str | None,
                 lidar_frame: np.ndarray | None,
                 gap_count: int,
                 distance_m: float,
@@ -242,8 +247,8 @@ class FirebaseUploader(Node):
             camera_url = None
             lidar_url  = None
 
-            # ── Upload USB camera image ────────────────────────────────
-            if camera_frame is not None:
+            # ── Upload Pi CSI camera image ─────────────────────────────
+            if camera_frame is not None and tmp_path is not None:
                 with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tf:
                     cv2.imwrite(tf.name, camera_frame,
                                 [cv2.IMWRITE_JPEG_QUALITY, 85])
@@ -252,6 +257,7 @@ class FirebaseUploader(Node):
                     blob.make_public()
                     camera_url = blob.public_url
                 os.unlink(tf.name)
+                os.unlink(tmp_path)   # clean up rpicam-still temp file
             else:
                 self.get_logger().warn("📷 No camera frame — camera.jpg skipped.")
 
@@ -285,15 +291,6 @@ class FirebaseUploader(Node):
 
         except Exception as e:
             self.get_logger().error(f"Firebase upload failed: {e}")
-
-    # ------------------------------------------------------------------
-    # Cleanup
-    # ------------------------------------------------------------------
-    def destroy_node(self):
-        if self._cap.isOpened():
-            self._cap.release()
-            self.get_logger().info("📷 USB camera released.")
-        super().destroy_node()
 
 
 def main(args=None):
