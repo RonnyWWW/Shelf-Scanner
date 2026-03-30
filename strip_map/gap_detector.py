@@ -52,15 +52,24 @@ class GapDetector(Node):
         self.get_logger().info(
             f"✅ GapDetector running — publishing to /strip/gaps "
             f"and /gap_events/trigger\n"
-            f"   Processing every {self.process_every_n_frames} frame(s)"
+            f"   Processing every {self.process_every_n_frames} frame(s)\n"
+            f"   Min gap width: {self.min_gap_width_m*100:.0f} cm "
+            f"({self.base_min_gap_width} px at {self.pixels_per_meter:.0f} px/m)"
         )
 
         # ------------------------------------------------------------
         # Tunable base parameters
         # ------------------------------------------------------------
-        self.base_min_gap_width   = 40
+        # Real-world minimum gap width — gaps narrower than 10 cm are ignored,
+        # gaps at or above 10 cm wide are detected.
+        self.min_gap_width_m = 0.10   # 10 cm
+
+        # pixels_per_meter at the reference distance (must match strip_node)
+        self.pixels_per_meter = 200.0
+
+        self.base_min_gap_width   = int(self.min_gap_width_m * self.pixels_per_meter)  # 20 px
         self.base_min_gap_height  = 50
-        self.base_min_gap_area    = 300
+        self.base_min_gap_area    = int(self.base_min_gap_height * self.base_min_gap_width * 0.375)  # 375
         self.base_depth_delta     = 40.0
         self.height_split_ratio   = 0.5
         self.min_shelf_strength   = 0.3
