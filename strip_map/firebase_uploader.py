@@ -195,7 +195,7 @@ class FirebaseUploader(Node):
 
         for cmd in ["rpicam-still", "libcamera-still"]:
             result = subprocess.run(
-                [cmd, "-o", tmp_path, "-t", "1", "--nopreview"],
+                [cmd, "-o", tmp_path, "-t", "1000", "--nopreview"],
                 capture_output=True,
                 text=True
             )
