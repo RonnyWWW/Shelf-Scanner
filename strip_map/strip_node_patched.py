@@ -137,6 +137,8 @@ class StripMapper(Node):
         ANGLE_START_DEG = -65.0   # start of right side window
         ANGLE_END_DEG   = 0.0     # up to center
 
+        angles_full = np.linspace(msg.angle_min, msg.angle_max, len(msg.ranges), dtype=np.float32)
+        
         mask = (angles_full > np.deg2rad(ANGLE_START_DEG)) & \
        (angles_full < np.deg2rad(ANGLE_END_DEG))
 
