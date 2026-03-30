@@ -27,6 +27,7 @@ setup(
             'dual_strip_mapper = strip_map.dual_strip_mapper:main',
             'strip_node_patched = strip_map.strip_node_patched:main',  # Keep for single mode
             'mcu_odom = strip_map.mcu_to_pi_node:main',
+            'firebase_uploader = strip_map.firebase_uploader:main'
         ],
     },
 )
