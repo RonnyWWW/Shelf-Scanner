@@ -134,7 +134,7 @@ class StripMapper(Node):
         self.get_logger().info(f"Received scan with {len(msg.ranges)} points")
 
         # --- Restrict Field of View (optional) ---
-        ANGLE_START_DEG = 0.0   # start of right side window
+        ANGLE_START_DEG = 30.0   # start of right side window
         ANGLE_END_DEG   = 65.0     # up to center
 
         angles_full = np.linspace(msg.angle_min, msg.angle_max, len(msg.ranges), dtype=np.float32)
