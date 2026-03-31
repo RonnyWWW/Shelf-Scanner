@@ -49,13 +49,6 @@ class GapDetector(Node):
         self.trigger_pub = self.create_publisher(String, '/gap_events/trigger', 10)
 
         self.bridge = CvBridge()
-        self.get_logger().info(
-            f"✅ GapDetector running — publishing to /strip/gaps "
-            f"and /gap_events/trigger\n"
-            f"   Processing every {self.process_every_n_frames} frame(s)\n"
-            f"   Min gap width: {self.min_gap_width_m*100:.0f} cm "
-            f"({self.base_min_gap_width} px at {self.pixels_per_meter:.0f} px/m)"
-        )
 
         # ------------------------------------------------------------
         # Tunable base parameters
@@ -81,6 +74,14 @@ class GapDetector(Node):
 
         # Only detect gaps in NEW (rightmost) region
         self.active_width = 250
+
+        self.get_logger().info(
+            f"✅ GapDetector running — publishing to /strip/gaps "
+            f"and /gap_events/trigger\n"
+            f"   Processing every {self.process_every_n_frames} frame(s)\n"
+            f"   Min gap width: {self.min_gap_width_m*100:.0f} cm "
+            f"({self.base_min_gap_width} px at {self.pixels_per_meter:.0f} px/m)"
+        )
 
     # ------------------------------------------------------------------
     # LiDAR callback: estimate current distance to shelf
