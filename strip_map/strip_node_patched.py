@@ -134,8 +134,8 @@ class StripMapper(Node):
         self.get_logger().info(f"Received scan with {len(msg.ranges)} points")
 
         # --- Restrict Field of View (optional) ---
-        ANGLE_START_DEG = 30.0   # start of right side window
-        ANGLE_END_DEG   = 65.0     # up to center
+        ANGLE_START_DEG = 50.0   # start of right side window
+        ANGLE_END_DEG   = 85.0     # up to center
 
         angles_full = np.linspace(msg.angle_min, msg.angle_max, len(msg.ranges), dtype=np.float32)
         
@@ -154,7 +154,7 @@ class StripMapper(Node):
 
         # Flip vertically so top = top shelf
         column = cv2.resize(normalized.reshape(-1, 1), (1, self.strip_height))
-        column = cv2.flip(column, 0)
+        #column = cv2.flip(column, 0)
 
         # ============ MODIFIED SECTION ============
         if self.enable_velocity_sync:
