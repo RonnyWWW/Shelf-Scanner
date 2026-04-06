@@ -75,10 +75,10 @@ class GapDetector(Node):
         self.active_tracks = []
 
         self.confirm_frames = 3
-        self.max_missed_frames = 4
-        self.match_x_tol = 35
-        self.match_y_tol = 25
-        self.match_w_tol = 30
+        self.max_missed_frames = 10
+        self.match_x_tol = 60
+        self.match_y_tol = 40
+        self.match_w_tol = 50
 
         self.get_logger().info(
             f"✅ GapDetector running — publishing to /strip/gaps "
