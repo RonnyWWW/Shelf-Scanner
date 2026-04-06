@@ -146,19 +146,33 @@ class StripMapper(Node):
         DISPLAY_MAX_R = 1.20   # meters
 
         # Replace invalid values with the maximum display depth
+        ranges = np.array(msg.ranges, dtype=np.float32)[mask]
+
+        # --- Build Vertical Column for Strip Map ---
+        DISPLAY_MIN_R = 0.20   # meters
+        DISPLAY_MAX_R = 1.20   # meters
+        TOO_FAR_R     = 0.95   # meters
+
+        # Replace invalid values
         ranges = np.nan_to_num(
             ranges,
-            nan=DISPLAY_MAX_R,
-            posinf=DISPLAY_MAX_R,
-            neginf=DISPLAY_MAX_R
+            nan=TOO_FAR_R,
+            posinf=TOO_FAR_R,
+            neginf=TOO_FAR_R
         )
 
-        # Clamp all values to the useful shelf depth window
+        # Mark past-shelf / above-shelf background
+        far_mask = ranges > TOO_FAR_R
+
+        # Clamp to useful shelf depth window
         ranges = np.clip(ranges, DISPLAY_MIN_R, DISPLAY_MAX_R)
 
-        # Normalize using fixed bounds instead of per-scan min/max
+        # Normalize with fixed bounds
         scaled = (ranges - DISPLAY_MIN_R) / (DISPLAY_MAX_R - DISPLAY_MIN_R + 1e-6)
         normalized = 255 - np.clip(scaled * 255, 0, 255).astype(np.uint8)
+
+        # Collapse all too-far returns to one flat background value
+        normalized[far_mask] = 0
 
         # Resize into one strip-map column
         column = cv2.resize(normalized.reshape(-1, 1), (1, self.strip_height))
