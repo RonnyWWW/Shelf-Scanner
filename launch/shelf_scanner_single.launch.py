@@ -32,10 +32,10 @@ def generate_launch_description():
                 'process_every_n_frames': 2  # Processing every 2 frames for CPU overload
             }]
         ),
-        Node(
-            package='strip_map',
-            executable='firebase_uploader',
-            name='firebase_uploader',
-            output='screen',
-        ),
+        #Node(
+            #package='strip_map',
+            #executable='firebase_uploader',
+            #name='firebase_uploader',
+            #output='screen',
+        #),
     ])
