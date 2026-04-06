@@ -25,8 +25,8 @@ def generate_launch_description():
         ),
         Node(
             package='strip_map',
-            executable='gap_detector',
-            name='gap_detector',
+            executable='gap_detector_tracked',
+            name='gap_detector_tracked',
             output='screen',
             parameters=[{
                 'process_every_n_frames': 2  # Processing every 2 frames for CPU overload
