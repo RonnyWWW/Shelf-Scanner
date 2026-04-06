@@ -165,7 +165,7 @@ class StripMapper(Node):
         normalized = 255 - np.clip(scaled * 255, 0, 255).astype(np.uint8)
 
         # Collapse all too-far returns to a single flat background value
-        normalized[far_mask] = 0
+        normalized[far_mask] = 255
 
         # Resize into one strip-map column
         column = cv2.resize(normalized.reshape(-1, 1), (1, self.strip_height))
