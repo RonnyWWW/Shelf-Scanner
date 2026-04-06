@@ -54,7 +54,7 @@ class GapDetector(Node):
         self.pixels_per_meter = 200.0
 
         self.base_min_gap_width   = int(self.min_gap_width_m * self.pixels_per_meter)  # 20 px
-        self.base_min_gap_height  = 50
+        self.base_min_gap_height  = 80
         self.base_min_gap_area    = int(self.base_min_gap_height * self.base_min_gap_width * 0.375)  # 375
         self.base_depth_delta     = 40.0
         self.height_split_ratio   = 0.5
