@@ -17,7 +17,7 @@ def generate_launch_description():
             output='screen',
             parameters=[{
                 'scan_topic': '/sick_tim_5xx/scan',
-                'enable_velocity_sync': True,
+                'enable_velocity_sync': False,
                 'velocity_topic': '/odom',
                 'pixels_per_meter': 200.0,
                 'min_velocity_threshold': 0.01
