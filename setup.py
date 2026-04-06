@@ -24,7 +24,6 @@ setup(
     entry_points={
         'console_scripts': [
             'gap_detector = strip_map.gap_detector:main',
-            'gap_detector_tracked = strip_map.gap_detector_tracked:main'
             'dual_strip_mapper = strip_map.dual_strip_mapper:main',
             'strip_node_patched = strip_map.strip_node_patched:main',  # Keep for single mode
             'mcu_odom = strip_map.mcu_to_pi_node:main',
