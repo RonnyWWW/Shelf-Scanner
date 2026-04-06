@@ -135,7 +135,7 @@ class StripMapper(Node):
 
         # --- Restrict Field of View (optional) ---
         ANGLE_START_DEG = 42.0   # 0=middle
-        ANGLE_END_DEG   = 80.0   # 135 = edge
+        ANGLE_END_DEG   = 100.0   # 135 = edge
 
         angles_full = np.linspace(msg.angle_min, msg.angle_max, len(msg.ranges), dtype=np.float32)
         
