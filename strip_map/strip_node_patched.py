@@ -136,24 +136,17 @@ class StripMapper(Node):
         mask = (angles_full > np.deg2rad(ANGLE_START_DEG)) & \
                (angles_full < np.deg2rad(ANGLE_END_DEG))
 
-        angles = angles_full[mask]
         ranges = np.array(msg.ranges, dtype=np.float32)[mask]
 
         # --- Build Vertical Column for Strip Map ---
-        # Fixed physical range window so far/background returns do not
-        # distort the whole column contrast
+        # Fixed physical range window for shelf imaging
         DISPLAY_MIN_R = 0.20   # meters
         DISPLAY_MAX_R = 1.20   # meters
 
-        # Replace invalid values with the maximum display depth
-        ranges = np.array(msg.ranges, dtype=np.float32)[mask]
+        # Anything beyond this is treated as "past the shelf / background"
+        TOO_FAR_R = 0.95       # meters
 
-        # --- Build Vertical Column for Strip Map ---
-        DISPLAY_MIN_R = 0.20   # meters
-        DISPLAY_MAX_R = 1.20   # meters
-        TOO_FAR_R     = 0.95   # meters
-
-        # Replace invalid values
+        # Replace invalid values first
         ranges = np.nan_to_num(
             ranges,
             nan=TOO_FAR_R,
@@ -161,17 +154,17 @@ class StripMapper(Node):
             neginf=TOO_FAR_R
         )
 
-        # Mark past-shelf / above-shelf background
+        # Mark far/background returns before clipping
         far_mask = ranges > TOO_FAR_R
 
-        # Clamp to useful shelf depth window
+        # Clamp everything into useful shelf depth window
         ranges = np.clip(ranges, DISPLAY_MIN_R, DISPLAY_MAX_R)
 
-        # Normalize with fixed bounds
+        # Normalize using fixed physical bounds
         scaled = (ranges - DISPLAY_MIN_R) / (DISPLAY_MAX_R - DISPLAY_MIN_R + 1e-6)
         normalized = 255 - np.clip(scaled * 255, 0, 255).astype(np.uint8)
 
-        # Collapse all too-far returns to one flat background value
+        # Collapse all too-far returns to a single flat background value
         normalized[far_mask] = 0
 
         # Resize into one strip-map column
@@ -194,6 +187,7 @@ class StripMapper(Node):
             self.image_pub.publish(image_msg)
 
         # --- Build Point Cloud (currently disabled) ---
+        # angles = angles_full[mask]
         # xs = np.zeros_like(ranges)
         # ys = ranges * np.cos(angles)
         # zs = ranges * np.sin(angles)
