@@ -134,8 +134,8 @@ class StripMapper(Node):
         self.get_logger().info(f"Received scan with {len(msg.ranges)} points")
 
         # --- Restrict Field of View (optional) ---
-        ANGLE_START_DEG = 42.0   # 0=middle
-        ANGLE_END_DEG   = 100.0   # 135 = edge
+        ANGLE_START_DEG = 30.0   # start of right side window
+        ANGLE_END_DEG   = 65.0     # up to center
 
         angles_full = np.linspace(msg.angle_min, msg.angle_max, len(msg.ranges), dtype=np.float32)
         
@@ -148,13 +148,22 @@ class StripMapper(Node):
 
         # --- Build Vertical Column for Strip Map ---
         # Each scan = one vertical slice through shelves
-        min_r, max_r = np.nanmin(ranges), np.nanmax(ranges)
-        scaled = (ranges - min_r) / (max_r - min_r + 1e-6)
+        # Use FIXED physical range bounds instead of per-column min/max.
+        # This prevents far background returns (e.g. above/past the shelf)
+        # from making the whole rest of the column look artificially close.
+        DISPLAY_MIN_R = 0.20  # meters
+        DISPLAY_MAX_R = 1.20  # meters
+
+        # Any return beyond the useful shelf depth just saturates dark.
+        ranges[ranges > DISPLAY_MAX_R] = DISPLAY_MAX_R
+        ranges = np.clip(ranges, DISPLAY_MIN_R, DISPLAY_MAX_R)
+
+        scaled = (ranges - DISPLAY_MIN_R) / (DISPLAY_MAX_R - DISPLAY_MIN_R + 1e-6)
         normalized = 255 - np.clip(scaled * 255, 0, 255).astype(np.uint8)
 
         # Flip vertically so top = top shelf
         column = cv2.resize(normalized.reshape(-1, 1), (1, self.strip_height))
-        #column = cv2.flip(column, 0)
+        column = cv2.flip(column, 0)
 
         # ============ MODIFIED SECTION ============
         if self.enable_velocity_sync:
