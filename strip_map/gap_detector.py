@@ -74,7 +74,7 @@ class GapDetector(Node):
         self.next_gap_id = 1
         self.active_tracks = []
 
-        self.confirm_frames = 3
+        self.confirm_frames = 2
         self.max_missed_frames = 10
         self.match_x_tol = 60
         self.match_y_tol = 40
