@@ -17,7 +17,7 @@ def generate_launch_description():
             output='screen',
             parameters=[{
                 'scan_topic': '/sick_tim_5xx/scan',
-                'enable_velocity_sync': False,
+                'enable_velocity_sync': True,
                 'velocity_topic': '/odom',
                 'pixels_per_meter': 200.0,
                 'min_velocity_threshold': 0.01
@@ -32,10 +32,10 @@ def generate_launch_description():
                 'process_every_n_frames': 2  # Processing every 2 frames for CPU overload
             }]
         ),
-        #Node(
-            #package='strip_map',
-            #executable='firebase_uploader',
-            #name='firebase_uploader',
-            #output='screen',
-        #),
+        Node(
+            package='strip_map',
+            executable='firebase_uploader',
+            name='firebase_uploader',
+            output='screen',
+        ),
     ])
