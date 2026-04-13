@@ -47,7 +47,7 @@ def generate_launch_description():
                 'min_shelf_strength': 0.45,
                 'shelf_window': 12,
                 'active_width': 220,
-                'new_track_min_x': 360.0,
+                'new_track_min_x': 470.0,
                 'confirm_frames': 3,
                 'max_missed_frames_candidate': 3,
                 'max_missed_frames_confirmed': 8,
