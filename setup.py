@@ -28,7 +28,7 @@ setup(
             'strip_node_patched = strip_map.strip_node_patched:main',
             'strip_node_patched_v3 = strip_map.strip_node_patched_v3:main'
             'firebase_uploader = strip_map.firebase_uploader:main'
-            'firebase_uploader_v2 = strip_map.firebase_uploader_v2:main
+            'firebase_uploader_v2 = strip_map.firebase_uploader_v2:main'
         ],
     },
 )
