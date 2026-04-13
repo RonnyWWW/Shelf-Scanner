@@ -14,7 +14,7 @@ def generate_launch_description():
         Node(
             package='strip_map',
             executable='strip_node_patched_v3',
-            name='strip_mapper',
+            name='strip_node_patched_v3',
             output='screen',
             parameters=[{
                 'scan_topic': '/sick_tim_5xx/scan',
@@ -34,7 +34,7 @@ def generate_launch_description():
         Node(
             package='strip_map',
             executable='gap_detector_v3',
-            name='gap_detector',
+            name='gap_detector_v3',
             output='screen',
             parameters=[{
                 'process_every_n_frames': 2,
@@ -62,7 +62,7 @@ def generate_launch_description():
         Node(
             package='strip_map',
             executable='firebase_uploader_v2',
-            name='firebase_uploader',
+            name='firebase_uploader_v2',
             output='screen',
         ),
     ])
