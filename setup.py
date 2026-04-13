@@ -24,10 +24,11 @@ setup(
     entry_points={
         'console_scripts': [
             'gap_detector = strip_map.gap_detector:main',
-            'dual_strip_mapper = strip_map.dual_strip_mapper:main',
-            'strip_node_patched = strip_map.strip_node_patched:main',  # Keep for single mode
-            'mcu_odom = strip_map.mcu_to_pi_node:main',
+            'gap_detector_v3 = strip_map.gap_detector_v3:main',
+            'strip_node_patched = strip_map.strip_node_patched:main',
+            'strip_node_patched_v3 = strip_map.strip_node_patched_v3:main'
             'firebase_uploader = strip_map.firebase_uploader:main'
+            'firebase_uploader_v2 = strip_map.firebase_uploader_v2:main
         ],
     },
 )
