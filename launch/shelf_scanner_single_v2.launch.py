@@ -23,7 +23,7 @@ def generate_launch_description():
             parameters=[{
                 'scan_topic': '/sick_tim_5xx/scan',
                 'velocity_topic': '/odom',
-                'enable_velocity_sync': True,
+                'enable_velocity_sync': False,
                 'pixels_per_meter': 180.0,
                 'min_velocity_threshold': 0.01,
                 'max_columns_per_update': 10,
